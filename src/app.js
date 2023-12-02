@@ -1,11 +1,26 @@
 const express = require("express");
 const fs = require("fs");
+const { userInfo } = require("os");
 const app = express();
 
-// Parsing user data from user.json 
-const users = JSON.parse(fs.readFileSync(`${__dirname}/../data/users.json`));
+// Parsing user data from user.json
+const users = JSON.parse(fs.readFileSync(`${__dirname}/data/user.json`));
 
 app.use(express.json());
+
+async function saveDataToDatabase(data) {
+	return new Promise((resolve, reject) => {
+		const jsonData = JSON.stringify(data);
+
+		fs.writeFile(`${__dirname}/data/user.json`, jsonData, (err) => {
+			if (err) {
+				reject(err);
+			} else {
+				resolve();
+			}
+		});
+	});
+}
 
 /*
 Write a GET Request to return all users. 
@@ -24,22 +39,24 @@ The response should be in the following format:
     }
 }*/
 app.get("/api/v1/users/", (req, res) => {
-   try {
-        res.status(200).json({
-            status: "success",
-            data: {
-                users,
-            },
-        });
-    } catch (err) {
-        res.status(404).json({
-            message: "Users Not Found",
-            status: "Error",
-            error: err,
-        });
-    }
+	try {
+		//Write your code here.
+		if (!!users) {
+			res.status(200).send({
+				status: "success",
+				data: {
+					users,
+				},
+			});
+		}
+	} catch (err) {
+		res.status(404).json({
+			message: "Users Not Found",
+			status: "Error",
+			error: err,
+		});
+	}
 });
-
 
 /*
 Write a GET Request to return a user by ID. 
@@ -57,30 +74,33 @@ The response should be in the following format:
 Return 404 error when user is not found. 
 */
 app.get("/api/v1/users/:id", (req, res) => {
-    try {
-        const user = users.find((user) => user._id === Number(req.params.id));
-        if (!user) {
-            res.status(404).json({
-                message: "User Not Found",
-                status: "Error",
-            });
-            return;
-        }
-        res.status(200).json({
-            status: "success",
-            data: {
-                user,
-            },
-        });
-    } catch (err) {
-        res.status(400).json({
-            message: "User Fetching Failed",
-            status: "Error",
-            error: err,
-        });
-    }
-});
+	try {
+		//Write your code here
+		const { id } = req.params;
+		const user = users.find((item) => Number(item._id) === Number(id));
+		// console.log(user);
 
+		if (!!user) {
+			res.status(201).send({
+				status: "success",
+				data: {
+					user,
+				},
+			});
+		} else {
+			res.status(404).send({
+				status: "Error",
+				message: "User Not Found",
+			});
+		}
+	} catch (err) {
+		res.status(400).json({
+			message: "User Fetching Failed",
+			status: "Error",
+			error: err,
+		});
+	}
+});
 
 /*
 Write a POST request to create a new User. 
@@ -98,36 +118,36 @@ The response should be in the following format:
 Generate a new id using the id of the last user in the database, increment it by 1
 Return a 400 error when the email or name is missing 
 */
+
 app.post("/api/v1/users/", (req, res) => {
-   try {
-        const { name, email } = req.body;
-        if (!name || !email) {
-            res.status(400).json({
-                message: "Name or Email is missing",
-                status: "Error",
-            });
-            return;
-        }
-        const id = users[users.length - 1]._id + 1;
-        const newUser = {
-            _id: id,
-            name,
-            email,
-        };
-        users.push(newUser);
-        fs.writeFileSync(`${__dirname}/../data/users.json`, JSON.stringify(users));
-        res.status(201).json({
-            status: "success",
-            data: {
-                user: newUser,
-            },
-        });
-       } catch (err) {
-        res.status(400).json({
-            message: "User Creation failed",
-            status: "Error",
-        });
-    }
+	try {
+		//Write your code here
+		const { name, email } = req.body;
+		if (!name || !email) {
+			// If either name or email is missing, send a single error response
+			return res.status(400).json({
+				status: "Error",
+				message: "Name or email missing",
+			});
+		}
+		const newId = users[users.length - 1]._id + 1;
+		const newUser = { _id: newId, name, email };
+		users.push(newUser);
+
+		saveDataToDatabase(users);
+		// send the success response
+		res.status(201).json({
+			status: "success",
+			data: {
+				user: newUser,
+			},
+		});
+	} catch (err) {
+		res.status(400).json({
+			message: "User Creation failed",
+			status: "Error",
+		});
+	}
 });
 
 /*
@@ -157,46 +177,56 @@ Return a 404 error if the user is missing, with the following message
 }
 */
 app.patch("/api/v1/users/:id", (req, res) => {
-    try {
-        const id = parseInt(req.params.id);
-        let users = JSON.parse(fs.readFileSync("users.json"));
-        let found = false;
+	try {
+		//Write your code here
+		const { id } = req.params;
+		let dbData = users.find((item) => Number(item._id) === Number(id));
+		console.log(dbData);
+		const body = req.body;
 
-        users = users.map((user) => {
-            if (user._id === id) {
-                found = true;
-                return {
-                    ...user,
-                    ...req.body,
-                };
-            } else {
-                return user;
-            }
-        });
+		if (!!dbData) {
+			let name = "";
+			let email = "";
+			if (body.name) {
+				name = body.name;
+				dbData.name = name;
 
-        if (!found) {
-            res.status(404).json({
-                message: "User not Found",
-            });
-            return;
-        }
+				saveDataToDatabase(users);
+			} else if (body.email) {
+				email = body.email;
+				dbData.email = email;
+				saveDataToDatabase(users);
+			} else {
+				email = body.email;
+				name = body.name;
+				dbData.name = name;
+				dbData.email = email;
 
-        fs.writeFileSync("users.json", JSON.stringify(users));
+				saveDataToDatabase(users);
+			}
 
-        res.status(200).json({
-            status: "success",
-            data: {
-                users,
-            },
-        });   
-    } catch (err) {
-        console.log(err);
-        res.status(400).json({
-            message: "User Updation Failed",
-            status: "Error",
-            error: err,
-        });
-    }
+			// console.log(users);
+			// saveDataToDatabase(users);
+			res.status(201).send({
+				status: "success",
+				data: {
+					users,
+				},
+			});
+		} else {
+			res.status(404).send({
+				status: "Error",
+				message: "User Not Found",
+			});
+		}
+	} catch (err) {
+		console.log(err);
+		res.status(400).json({
+			message: "User Updation Failed",
+			status: "Error",
+			error: err,
+		});
+	}
 });
 
 /*
@@ -226,43 +256,46 @@ Return a 404 error if the user is missing, with the following message
 }
 */
 app.delete("/api/v1/users/:id", (req, res) => {
-    try {
-        const id = parseInt(req.params.id);
-        let users = JSON.parse(fs.readFileSync("users.json"));
-        let found = false;
+	try {
+		//Write your code here
+		const { id } = req.params;
+		let index = -1;
+		let dbData = users.find((item, idx) => {
+			index = idx;
+			return Number(item._id) === Number(id);
+		});
+		// console.log(dbData);
 
-        users = users.filter((user) => {
-            if (user._id === id) {
-                found = true;
-                return false;
-            } else {
-                return true;
-            }
-        });
+		if (!!dbData) {
+			// const index = users.findIndex((item) => Number(item.id) === Number(id));
+			// console.log(users);
 
-        if (!found) {
-            res.status(404).json({
-                message: "User not Found",
-            });
-            return;
-        }
+			users.splice(index, 1);
+			// console.log(index);
 
-        fs.writeFileSync("users.json", JSON.stringify(users));
+			saveDataToDatabase(users);
 
-        res.status(200).json({
-            status: "success",
-            data: {
-                users,
-            },
-        });
-    } catch (err) {
-        console.log(err);
-        res.status(400).json({
-            message: "User Deletion Failed",
-            status: "Error",
-            error: err,
-        });
-    }
+			res.status(201).send({
+				status: "success",
+				message: "success",
+				data: {
+					users,
+				},
+			});
+		} else {
+			res.status(404).send({
+				message: "User Not Found",
+				status: "Error",
+			});
+		}
+	} catch (err) {
+		console.log(err);
+		res.status(400).json({
+			message: "User Deletion Failed",
+			status: "Error",
+			error: err,
+		});
+	}
 });
 
 module.exports = app;
